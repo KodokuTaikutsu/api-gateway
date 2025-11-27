@@ -10,4 +10,5 @@ urlpatterns = [
 
     # API 3: POST /api/debts/import
     path('debts/import', views.DebtImportView.as_view(), name='debt-import'),
+    path('debts/stats', views.DebtStatsView.as_view(), name='debt-stats'),
 ]

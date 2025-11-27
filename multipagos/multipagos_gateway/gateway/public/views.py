@@ -1,10 +1,13 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.conf import settings
+import logging
 from rest_framework import status
 from django.http import HttpResponse  
 import logging
-import requests
+import requests # type: ignore
 from gateway.clients.payments import PaymentsClient
+from rest_framework.permissions import AllowAny
 
 from gateway.services import MicroserviceClient
 from .serializers import (
@@ -14,7 +17,9 @@ from .serializers import (
     
 )
 
+
 client = MicroserviceClient()
+AUTH_BASE_URL = getattr(settings, "AUTH_SERVICE_BASE_URL", "http://127.0.0.1:8082")
 
 
 class PublicCompaniesView(APIView):
@@ -200,3 +205,158 @@ def _proxy_response(resp: requests.Response) -> Response:
         data = resp.text
 
     return Response(data, status=resp.status_code)
+
+
+
+
+class AuthRegisterProxyView(APIView):
+    """
+    POST /api/public/auth/register/
+    Proxies to POST {AUTH_BASE_URL}/auth/register
+    Body: JSON (whatever Auth service expects in RegisterDto)
+    """
+
+    def post(self, request):
+        try:
+            resp = requests.post(
+                f"{AUTH_BASE_URL}/auth/register",
+                json=request.data,
+                timeout=5,
+            )
+        except requests.RequestException:
+            return Response(
+                {"detail": "auth service unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(resp.json(), status=resp.status_code)
+
+
+class AuthLoginProxyView(APIView):
+    """
+    POST /api/public/auth/login/
+    Proxies to POST {AUTH_BASE_URL}/auth/login
+    Body: JSON with email/password (LoginDto)
+    """
+
+    def post(self, request):
+        try:
+            resp = requests.post(
+                f"{AUTH_BASE_URL}/auth/login",
+                json=request.data,
+                timeout=5,
+            )
+        except requests.RequestException:
+            return Response(
+                {"detail": "auth service unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(resp.json(), status=resp.status_code)
+
+
+class AuthMeContextProxyView(APIView):
+  
+    authentication_classes = []        # don't run JWT auth locally
+    permission_classes = [AllowAny]    # let anyone call, token is checked by auth-service
+
+    def get(self, request, *args, **kwargs):
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return Response(
+                {"detail": "Authorization header missing"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            resp = requests.get(
+                f"{AUTH_BASE_URL}/me/context",
+                headers={"Authorization": auth_header},
+                timeout=5,
+            )
+        except requests.RequestException as e:
+            logger.exception("[AuthProxy] Error calling auth service /auth/me/context")
+            return Response(
+                {"detail": "auth service unavailable", "error": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Just proxy through the status + JSON
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {"raw": resp.text}
+
+        return Response(data, status=resp.status_code)
+
+
+class AuthCompanyListProxyView(APIView):
+    """
+    GET /api/public/auth/companies/
+    POST /api/public/auth/companies/
+    Proxies to GET/POST {AUTH_BASE_URL}/companies
+    """
+
+    def get(self, request):
+        headers = {}
+        auth_header = request.headers.get("Authorization")
+        if auth_header:
+            headers["Authorization"] = auth_header
+
+        try:
+            resp = requests.get(
+                f"{AUTH_BASE_URL}/companies",
+                headers=headers,
+                timeout=5,
+            )
+        except requests.RequestException:
+            return Response(
+                {"detail": "auth service unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(resp.json(), status=resp.status_code)
+
+    def post(self, request):
+        headers = {}
+        auth_header = request.headers.get("Authorization")
+        if auth_header:
+            headers["Authorization"] = auth_header
+
+        try:
+            resp = requests.post(
+                f"{AUTH_BASE_URL}/companies",
+                json=request.data,
+                headers=headers,
+                timeout=5,
+            )
+        except requests.RequestException:
+            return Response(
+                {"detail": "auth service unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(resp.json(), status=resp.status_code)
+
+
+class AuthCompanyDetailProxyView(APIView):
+    """
+    GET /api/public/auth/companies/<id>/
+    Proxies to GET {AUTH_BASE_URL}/companies/{id}
+    """
+
+    def get(self, request, company_id):
+        headers = {}
+        auth_header = request.headers.get("Authorization")
+        if auth_header:
+            headers["Authorization"] = auth_header
+
+        try:
+            resp = requests.get(
+                f"{AUTH_BASE_URL}/companies/{company_id}",
+                headers=headers,
+                timeout=5,
+            )
+        except requests.RequestException:
+            return Response(
+                {"detail": "auth service unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(resp.json(), status=resp.status_code)

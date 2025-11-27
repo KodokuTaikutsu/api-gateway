@@ -1,8 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser  # Para subir archivos
+from rest_framework.parsers import MultiPartParser, FormParser
 import pandas as pd
+# Nuevas importaciones para los reportes
+from django.db.models import Count, Sum, Q
+from django.utils import timezone
 
 from .models import Debt, Import
 from .serializers import (
@@ -16,7 +19,6 @@ from .serializers import (
 class DebtLookupView(APIView):
     """
     API 1: Búsqueda de deuda (POST /debts/lookup)
-    [cite: 13, 47]
     """
 
     def post(self, request):
@@ -42,7 +44,6 @@ class DebtLookupView(APIView):
 class DebtStatusUpdateView(APIView):
     """
     API 2: Actualización de estado (PATCH /debts/{id})
-    [cite: 47, 49]
     """
 
     def patch(self, request, id):  # 'id' viene de la URL
@@ -65,17 +66,13 @@ class DebtStatusUpdateView(APIView):
 class DebtImportView(APIView):
     """
     API 3: Carga de deudas por CSV (POST /debts/import)
-    [cite: 20, 47]
     """
     parser_classes = (MultiPartParser, FormParser)  # Habilitamos subida de archivos
 
     def post(self, request):
         file_obj = request.FILES.get('file')
 
-        # NOTA DE SEGURIDAD: En un proyecto real, el tenant_id vendría
-        # del usuario autenticado (request.user.tenant_id)[cite: 29].
-        # Por simplicidad, lo leemos de los datos del formulario.
-        tenant_id = request.data.get('tenant_id', 'default_tenant')  # Usar request.user en un futuro
+        tenant_id = request.data.get('tenant_id', 'default_tenant')
 
         if not file_obj:
             return Response({"error": "Archivo CSV no provisto."}, status=status.HTTP_400_BAD_REQUEST)
@@ -88,20 +85,21 @@ class DebtImportView(APIView):
         )
 
         try:
-            # 2. Leer el CSV con Pandas (¡súper fácil!)
-            df = pd.read_csv(file_obj)
+            # 2. Leer el CSV con Pandas
+            # Agregamos encoding='latin1' para mayor compatibilidad con Excel
+            df = pd.read_csv(file_obj, encoding='latin1')
 
             debts_to_create = []
             for index, row in df.iterrows():
                 debts_to_create.append(
                     Debt(
-                        tenant_id=tenant_id,  # Asignamos la empresa
+                        tenant_id=tenant_id,
                         service_id=row['service_id'],
                         customer_ref=row['customer_ref'],
                         period=row['period'],
                         amount=row['amount'],
                         due_date=row['due_date'],
-                        status='PENDING'  # Todas las deudas nuevas están pendientes
+                        status='PENDING'
                     )
                 )
 
@@ -119,3 +117,53 @@ class DebtImportView(APIView):
             import_record.status = 'FAILED'
             import_record.save()
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DebtStatsView(APIView):
+    """
+    API 4: Estadísticas y Reportes (Dashboard)
+    GET /api/debts/stats
+    """
+    def get(self, request):
+        today = timezone.now().date()
+
+        # 1. Total de deudas cargadas (agrupado por empresa y servicio)
+        by_service = Debt.objects.values('tenant_id', 'service_id').annotate(total=Count('id'))
+
+        # 2. Estado de las deudas (PENDING/PAID/CANCELLED)
+        by_status = Debt.objects.values('status').annotate(total=Count('id'))
+
+        # 3. Deudas vencidas / morosidad
+        overdue_count = Debt.objects.filter(
+            status='PENDING',
+            due_date__lt=today
+        ).count()
+
+        overdue_amount = Debt.objects.filter(
+            status='PENDING',
+            due_date__lt=today
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        # 4. Estadísticas de imports
+        import_stats = Import.objects.aggregate(
+            total_files=Count('id'),
+            total_rows_processed=Sum('row_count'),
+            total_errors=Count('id', filter=Q(status='FAILED'))
+        )
+
+        response_data = {
+            "summary": {
+                "generated_at": timezone.now(),
+                "overdue_debts_count": overdue_count,
+                "overdue_debts_amount": overdue_amount
+            },
+            "debts_by_company_service": list(by_service),
+            "debts_by_status": list(by_status),
+            "import_stats": {
+                "files_uploaded": import_stats['total_files'],
+                "rows_processed": import_stats['total_rows_processed'] or 0,
+                "failed_imports": import_stats['total_errors']
+            }
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)

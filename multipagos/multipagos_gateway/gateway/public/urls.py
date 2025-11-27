@@ -10,6 +10,11 @@ from .views import (
     PaymentQrGenerateProxyView,
     PaymentQrScanProxyView,
     PaymentQrGenerateFromDebtProxyView,
+    AuthRegisterProxyView,
+    AuthLoginProxyView,
+    AuthMeContextProxyView,
+    AuthCompanyListProxyView,
+    AuthCompanyDetailProxyView,
  
     
 )
@@ -43,6 +48,19 @@ urlpatterns = [
         "payments/qr/generate-from-debt/",
         PaymentQrGenerateFromDebtProxyView.as_view(),
         name="payments-qr-generate-from-debt",
+    ),
+
+    # Auth
+    path("auth/register/", AuthRegisterProxyView.as_view(), name="auth-register"),
+    path("auth/login/", AuthLoginProxyView.as_view(), name="auth-login"),
+    path("me/context/", AuthMeContextProxyView.as_view(), name="auth-me-context"),
+
+    # Auth-related companies
+    path("auth/companies/", AuthCompanyListProxyView.as_view(), name="auth-companies"),
+    path(
+        "auth/companies/<int:company_id>/",
+        AuthCompanyDetailProxyView.as_view(),
+        name="auth-company-detail",
     ),
    
 ]

@@ -143,8 +143,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 import os
 
-AUTH_SERVICE_URL      = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
+AUTH_SERVICE_URL      = os.getenv("AUTH_SERVICE_URL", "http://127.0.0.1:8082")
 CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://127.0.0.1:8080")
 BILLING_SERVICE_URL = os.environ.get("BILLING_SERVICE_URL", "http://127.0.0.1:8001/api")
 PAYMENTS_SERVICE_URL = os.environ.get("PAYMENTS_SERVICE_URL", "http://127.0.0.1:8081")
-REPORTS_SERVICE_URL   = os.getenv("REPORTS_SERVICE_URL", "http://reports-service:8000")
