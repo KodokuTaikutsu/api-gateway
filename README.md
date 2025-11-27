@@ -257,6 +257,8 @@ Payments:
 All responses (except direct receipt downloads from pagos) are JSON.
 
 Authentication (via Gateway)
+---------------------------------
+
 
 The gateway exposes the auth service under:
 
