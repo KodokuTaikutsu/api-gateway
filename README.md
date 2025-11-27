@@ -255,3 +255,108 @@ Payments:
     - POST /payments/qr/scan/
 
 All responses (except direct receipt downloads from pagos) are JSON.
+
+Authentication (via Gateway)
+
+The gateway exposes the auth service under:
+
+http://<gateway-host>:8000/api/public/auth/
+
+Default demo users (seeded by the auth service):
+
+admin / admin123 (role: ADMIN, company 1)
+
+provider / prov123 (role: PROVIDER, company 2)
+
+1. Register a user
+
+Endpoint:
+POST /api/public/auth/register/
+
+Body (JSON):
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+{
+"username": "demo",
+"email": "demo@example.com
+
+",
+"password": "demo123"
+}
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Example curl:
+
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+curl -i -X POST http://127.0.0.1:8000/api/public/auth/register/
+
+
+-H "Content-Type: application/json"
+-d '{
+"username": "demo",
+"email": "demo@example.com
+
+",
+"password": "demo123"
+}'
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+2. Login and get JWT
+
+Endpoint:
+POST /api/public/auth/login/
+
+Body (JSON):
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+{
+"username": "admin",
+"password": "admin123"
+}
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Example curl:
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+curl -i -X POST http://127.0.0.1:8000/api/public/auth/login/
+
+
+-H "Content-Type: application/json"
+-d '{
+"username": "admin",
+"password": "admin123"
+}'
+
+Typical response:
+
+{
+"token": "eyJhbGciOiJIUzI1NiJ9....",
+"username": "admin",
+"companyIds": [1]
+}
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Save the "token" value; it is a JWT used for subsequent calls.
+
+3. Get current user context
+
+Endpoint:
+GET /api/public/auth/me/context/
+
+Headers:
+Authorization: Bearer <JWT_FROM_LOGIN>
+
+Example curl:
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+TOKEN="<JWT_FROM_LOGIN>"
+
+curl -i http://127.0.0.1:8000/api/public/auth/me/context/
+
+
+-H "Authorization: Bearer $TOKEN"
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gateway forwards the token to the auth service and returns whatever context the auth service provides (username, companyIds, roles, etc.).
